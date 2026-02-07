@@ -37,6 +37,9 @@ export default function Home() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const [activeTab, setActiveTab] = useState<'upload' | 'generate'>('upload');
+  const [textToGenerate, setTextToGenerate] = useState('');
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       setFile(e.target.files[0]);
@@ -63,6 +66,32 @@ export default function Home() {
     } catch (err: any) {
       console.error(err);
       setError("Analysis failed. Please try again.");
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  const handleGenerate = async () => {
+    if (!textToGenerate.trim()) return;
+
+    setIsAnalyzing(true);
+    setError(null);
+    setResult(null);
+
+    try {
+      const response = await axios.post('/api/generate-fake', {
+        text: textToGenerate
+      });
+
+      if (response.data.analysis) {
+        setResult(response.data.analysis);
+      } else {
+        setError("Generation succeeded but analysis data is missing.");
+      }
+
+    } catch (err: any) {
+      console.error(err);
+      setError(err.response?.data?.error || "Generation failed. Ensure API key is set.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -95,70 +124,132 @@ export default function Home() {
           </p>
         </section>
 
-        {/* Upload Container */}
+        {/* Tab Switcher */}
+        <div className="flex justify-center gap-4 mb-8">
+          <button
+            onClick={() => { setActiveTab('upload'); setResult(null); setError(null); }}
+            className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'upload' ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/50' : 'bg-neutral-900 text-neutral-400 border border-white/5 hover:bg-white/5'}`}
+          >
+            Upload Audio
+          </button>
+          <button
+            onClick={() => { setActiveTab('generate'); setResult(null); setError(null); }}
+            className={`px-6 py-2 rounded-full text-sm font-medium transition-all ${activeTab === 'generate' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50' : 'bg-neutral-900 text-neutral-400 border border-white/5 hover:bg-white/5'}`}
+          >
+            Generate Fake (Test)
+          </button>
+        </div>
+
+        {/* Main Interface Container */}
         <div className="relative group">
-          <div className="absolute -inset-1 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000"></div>
+          <div className={`absolute -inset-1 bg-gradient-to-r rounded-2xl blur opacity-25 group-hover:opacity-50 transition duration-1000 ${activeTab === 'upload' ? 'from-cyan-500 to-blue-600' : 'from-purple-500 to-pink-600'}`}></div>
           <div className="relative bg-neutral-900 border border-white/10 rounded-xl p-10 flex flex-col items-center justify-center gap-6 min-h-[300px]">
 
-            {!file && !result ? (
-              <>
-                <div className="w-20 h-20 bg-neutral-800 rounded-full flex items-center justify-center mb-2">
-                  <Upload className="w-8 h-8 text-neutral-400" suppressHydrationWarning />
-                </div>
-                <div className="text-center space-y-2">
-                  <label htmlFor="audio-upload" className="cursor-pointer">
-                    <span className="bg-white text-black px-6 py-3 rounded-full font-semibold hover:scale-105 transition-transform inline-block">
-                      Upload Audio
-                    </span>
-                    <input
-                      id="audio-upload"
-                      type="file"
-                      accept="audio/*"
-                      className="hidden"
-                      onChange={handleFileChange}
-                    />
-                  </label>
-                  <p className="text-sm text-neutral-500">Supports WAV, MP3, M4A</p>
-                </div>
-              </>
-            ) : (
-              <div className="w-full space-y-6 animate-in fade-in zoom-in duration-300">
-                {/* File Preview */}
-                <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-cyan-500/20 rounded-full flex items-center justify-center">
-                      <Play className="w-5 h-5 text-cyan-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium text-white">{file?.name}</p>
-                      <p className="text-xs text-neutral-400">{(file?.size! / 1024 / 1024).toFixed(2)} MB</p>
-                    </div>
+            {activeTab === 'upload' ? (
+              /* Upload Interface */
+              !file && !result ? (
+                <>
+                  <div className="w-20 h-20 bg-neutral-800 rounded-full flex items-center justify-center mb-2">
+                    <Upload className="w-8 h-8 text-neutral-400" suppressHydrationWarning />
                   </div>
-                  {!result && !isAnalyzing && (
+                  <div className="text-center space-y-2">
+                    <label htmlFor="audio-upload" className="cursor-pointer">
+                      <span className="bg-white text-black px-6 py-3 rounded-full font-semibold hover:scale-105 transition-transform inline-block">
+                        Upload Audio
+                      </span>
+                      <input
+                        id="audio-upload"
+                        type="file"
+                        accept="audio/*"
+                        className="hidden"
+                        onChange={handleFileChange}
+                      />
+                    </label>
+                    <p className="text-sm text-neutral-500">Supports WAV, MP3, M4A</p>
+                  </div>
+                </>
+              ) : (
+                <div className="w-full space-y-6 animate-in fade-in zoom-in duration-300">
+                  {/* File Preview */}
+                  <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/10">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 bg-cyan-500/20 rounded-full flex items-center justify-center">
+                        <Play className="w-5 h-5 text-cyan-400" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-white">{file?.name}</p>
+                        <p className="text-xs text-neutral-400">{(file?.size! / 1024 / 1024).toFixed(2)} MB</p>
+                      </div>
+                    </div>
+                    {!result && !isAnalyzing && (
+                      <button
+                        onClick={() => setFile(null)}
+                        className="text-xs text-red-400 hover:text-red-300"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+
+                  {!result && (
                     <button
-                      onClick={() => setFile(null)}
-                      className="text-xs text-red-400 hover:text-red-300"
+                      onClick={handleAnalyze}
+                      disabled={isAnalyzing}
+                      className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg font-bold text-lg hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      Remove
+                      {isAnalyzing ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Analyzing Signal...
+                        </>
+                      ) : (
+                        "Run Deepfake Detection"
+                      )}
                     </button>
                   )}
                 </div>
+              )
+            ) : (
+              /* Generate Interface */
+              <div className="w-full max-w-xl space-y-6">
+                <div className="text-center mb-6">
+                  <div className="w-16 h-16 bg-purple-500/10 rounded-full flex items-center justify-center mx-auto mb-4 border border-purple-500/20">
+                    <Mic className="w-8 h-8 text-purple-400" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-white">Generate Test Deepfake</h3>
+                  <p className="text-sm text-neutral-400">Uses ElevenLabs to generate audio, then analyzes it.</p>
+                </div>
 
                 {!result && (
-                  <button
-                    onClick={handleAnalyze}
-                    disabled={isAnalyzing}
-                    className="w-full py-4 bg-gradient-to-r from-cyan-500 to-blue-600 rounded-lg font-bold text-lg hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isAnalyzing ? (
-                      <>
-                        <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        Analyzing Signal...
-                      </>
-                    ) : (
-                      "Run Deepfake Detection"
-                    )}
-                  </button>
+                  <div className="space-y-4">
+                    <textarea
+                      value={textToGenerate}
+                      onChange={(e) => setTextToGenerate(e.target.value)}
+                      placeholder="Enter text to clone (e.g., 'This is a verified human voice message.')"
+                      className="w-full h-32 bg-neutral-950 border border-white/10 rounded-lg p-4 text-white focus:outline-none focus:border-purple-500 transition-colors resize-none"
+                    />
+                    <button
+                      onClick={handleGenerate}
+                      disabled={isAnalyzing || !textToGenerate.trim()}
+                      className="w-full py-4 bg-gradient-to-r from-purple-500 to-pink-600 rounded-lg font-bold text-lg hover:shadow-[0_0_20px_rgba(168,85,247,0.5)] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          Generating & Analyzing...
+                        </>
+                      ) : (
+                        "Generate & Detect"
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {result && (
+                  <div className="text-center p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+                    <p className="text-green-400 font-medium">Generation Complete! See analysis below.</p>
+                    <button onClick={() => { setResult(null); setTextToGenerate(''); }} className="text-xs text-neutral-400 hover:text-white mt-2 underline">Reset</button>
+                  </div>
                 )}
               </div>
             )}

@@ -53,7 +53,63 @@ async def analyze_audio(file: UploadFile = File(...)):
 
 @app.post("/generate-fake")
 async def generate_fake(request: GenerateFakeRequest):
-    return {"message": "Not implemented yet"}
+    import os
+    import requests
+    from fastapi.responses import FileResponse
+    
+    api_key = os.getenv("ELEVENLABS_API_KEY")
+    if not api_key:
+        return {"error": "Missing ELEVENLABS_API_KEY in backend/.env"}
+
+    # Default Voice ID (Rachel) - you can change this or pass it from frontend
+    voice_id = request.voice_id or "21m00Tcm4TlvDq8ikWAM" 
+    
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    
+    headers = {
+        "Accept": "audio/mpeg",
+        "Content-Type": "application/json",
+        "xi-api-key": api_key
+    }
+    
+    data = {
+        "text": request.text,
+        "model_id": "eleven_monolingual_v1",
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.5
+        }
+    }
+    
+    try:
+        response = requests.post(url, json=data, headers=headers)
+        response.raise_for_status()
+        
+        # Save audio temporarily
+        filename = f"generated_{int(time.time())}.mp3"
+        filepath = os.path.join(os.getcwd(), filename)
+        
+        with open(filepath, "wb") as f:
+            f.write(response.content)
+            
+        # Optional: Analyze the generated file immediately to show results
+        analysis_result = detector.analyze(filepath)
+        
+        # Return both file url (needs static serving setup) and analysis
+        # For simplicity in this demo, we'll return the analysis and a message
+        # In a real app, serve the file via StaticFiles or upload to S3
+        
+        # We need to clean up the file eventually, but let's keep it for now so frontend can play it if we serve it
+        # For now, let's just return the analysis result of the fake audio
+        return {
+            "message": "Audio generated successfully",
+            "filename": filename,
+            "analysis": analysis_result
+        }
+
+    except Exception as e:
+        print(f"ElevenLabs Error: {e}")
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
