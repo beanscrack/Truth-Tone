@@ -102,7 +102,7 @@ export default function Home() {
             {!file && !result ? (
               <>
                 <div className="w-20 h-20 bg-neutral-800 rounded-full flex items-center justify-center mb-2">
-                  <Upload className="w-8 h-8 text-neutral-400" />
+                  <Upload className="w-8 h-8 text-neutral-400" suppressHydrationWarning />
                 </div>
                 <div className="text-center space-y-2">
                   <label htmlFor="audio-upload" className="cursor-pointer">
