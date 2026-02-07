@@ -3,3 +3,9 @@ uvicorn
 pydantic
 python-multipart
 requests
+python-dotenv
+google-generativeai
+librosa
+numpy
+matplotlib
+scipy

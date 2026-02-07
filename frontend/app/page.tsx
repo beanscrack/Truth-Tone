@@ -24,6 +24,7 @@ interface AnalysisResult {
   }>;
   timeline_data: Array<{ time: number, confidence: number }>;
   audio_fingerprint: {
+    spectrogram?: number[][]; // 2D array for 3D viz
     frequency_bins: number[];
     amplitude_bins: number[];
     time_bins: number[];
@@ -229,7 +230,7 @@ export default function Home() {
               <div className="bg-neutral-900 border border-white/10 rounded-xl p-6 h-[400px] flex items-center justify-center relative overflow-hidden group">
                 <div className="absolute inset-0 bg-grid-white/[0.02] -z-10" />
                 {/* Mapped raw freq data to mimic 2D spectrogram input for now */}
-                <AudioFingerprint data={[result.audio_fingerprint.frequency_bins.map(v => v * 0.5)]} />
+                <AudioFingerprint data={result.audio_fingerprint.spectrogram || []} />
               </div>
 
               {/* Placeholder for Heatmap/Timeline */}

@@ -14,7 +14,11 @@ function Terrain({ data }: { data: number[][] }) {
 
     // Generate geometry from data
     const geometry = useMemo(() => {
-        if (!data || data.length === 0) return new THREE.PlaneGeometry(10, 10, 10, 10);
+        // Safe check: data exists, is an array, and has inner arrays (2D)
+        if (!data || !Array.isArray(data) || data.length === 0 || !Array.isArray(data[0])) {
+            // Return a flat plane as placeholder
+            return new THREE.PlaneGeometry(10, 10, 10, 10);
+        }
 
         const width = data.length; // Frequency bins
         const height = data[0].length; // Time steps
