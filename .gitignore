@@ -51,3 +51,20 @@ build/
 # Project Specific
 temp_*
 *.log
+
+# ML - Large files (use download script instead)
+truthtone_ml/data/
+truthtone_ml/checkpoints/
+truthtone_ml/logs/
+truthtone_ml/spectrograms/
+*.zip
+*.pt
+*.pth
+*.onnx
+*.flac
+*.wav
+*.mp3
+
+# Generated files
+generated_*.mp3
+eval_results/
