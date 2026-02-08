@@ -151,6 +151,58 @@ def classify_audio(y, sr):
     return real_prob
 
 
+def classify_full_audio_scan(y, sr):
+    """
+    Scan the entire audio file with 4s windows (matching training duration)
+    and aggregate predictions for a global score.
+    """
+    window_len = int(sr * AUDIO_DURATION) # 4s
+    hop_len = int(window_len / 2)         # 2s overlap
+    
+    # If shorter than 4s, just use the single prediction
+    if len(y) < window_len:
+        return classify_audio(y, sr)
+        
+    # Create overlapping windows
+    tensors = []
+    
+    # If exactly 4s, range might be empty with default logic, handle carefully
+    # We want at least one window
+    if len(y) == window_len:
+        positions = [0]
+    else:
+        positions = range(0, len(y) - window_len + 1, hop_len)
+    
+    for p in positions:
+        segment = y[p : p + window_len]
+        tensors.append(_prepare_input(segment, sr))
+        
+    if not tensors: # Should not happen given check above, but safety first
+        return classify_audio(y, sr)
+
+    batch = torch.cat(tensors, dim=0).to(device)
+    
+    with torch.no_grad():
+        output = model(batch)
+        
+    probs = torch.softmax(output, dim=1).float().cpu().numpy()
+    real_probs = probs[:, 0] * 100
+    
+    # Aggregation strategy:
+    # The model detects "fake" artifacts. If ANY segment is strongly fake, 
+    # the file is likely fake. Averaging would dilute a brief glitch.
+    
+    min_score = np.min(real_probs) # The most "fake" segment score
+    avg_score = np.mean(real_probs)
+    
+    # If we find a very suspicious segment (< 50% real), use that minimum score
+    # to warn the user. Otherwise, average the scores for stability.
+    if min_score < 50:
+        return float(min_score)
+    else:
+        return float(avg_score)
+
+
 def classify_segments(y, sr):
     """Run batched sliding window analysis for per-segment scores."""
     seg_samples = int(SEGMENT_LENGTH * sr)
@@ -373,8 +425,8 @@ async def analyze_audio(file: UploadFile = File(...)):
         # Convert to audio
         y, sr, mel_db, duration = audio_to_spectrogram(audio_bytes)
 
-        # Overall classification
-        overall_score = classify_audio(y, sr)
+        # Overall classification (scan whole file)
+        overall_score = classify_full_audio_scan(y, sr)
         verdict = get_verdict(overall_score)
 
         # Per-segment analysis
@@ -482,7 +534,7 @@ async def generate_fake(
         y, sr, mel_db, duration = audio_to_spectrogram(audio_bytes)
         
         # Classification
-        overall_score = classify_audio(y, sr)
+        overall_score = classify_full_audio_scan(y, sr)
         verdict = get_verdict(overall_score)
         
         # Segments

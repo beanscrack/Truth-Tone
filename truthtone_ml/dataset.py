@@ -8,10 +8,16 @@ import numpy as np
 import torch
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from pathlib import Path
-from config import (
-    SPEC_DIR, SPEC_IMAGE_SIZE, CLASS_MAP, LABEL_BONAFIDE, LABEL_SPOOF,
-    AUGMENT_TRAIN, AUG_TIME_MASK_MAX, AUG_FREQ_MASK_MAX, AUG_NOISE_STD
-)
+try:
+    from .config import (
+        SPEC_DIR, SPEC_IMAGE_SIZE, CLASS_MAP, LABEL_BONAFIDE, LABEL_SPOOF,
+        AUGMENT_TRAIN, AUG_TIME_MASK_MAX, AUG_FREQ_MASK_MAX, AUG_NOISE_STD
+    )
+except ImportError:
+    from config import (
+        SPEC_DIR, SPEC_IMAGE_SIZE, CLASS_MAP, LABEL_BONAFIDE, LABEL_SPOOF,
+        AUGMENT_TRAIN, AUG_TIME_MASK_MAX, AUG_FREQ_MASK_MAX, AUG_NOISE_STD
+    )
 
 
 class SpectrogramDataset(Dataset):

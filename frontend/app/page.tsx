@@ -1,5 +1,6 @@
 "use client";
 
+import Link from 'next/link';
 import { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, Mic, Play, ShieldCheck, ShieldAlert, Sparkles, Activity, FileAudio, ArrowRight } from 'lucide-react';
@@ -163,8 +164,8 @@ export default function Home() {
             <span className="text-sm font-medium tracking-tight text-white">TruthTone</span>
           </div>
           <div className="flex gap-4">
-            <button className="text-xs font-medium text-white/70 hover:text-white transition-colors">Documentation</button>
-            <button className="text-xs font-medium text-white/70 hover:text-white transition-colors">API</button>
+            <Link href="/docs" className="text-xs font-medium text-white/70 hover:text-white transition-colors">Documentation</Link>
+            <Link href="/api" className="text-xs font-medium text-white/70 hover:text-white transition-colors">API</Link>
             <WalletButton />
           </div>
         </div>
