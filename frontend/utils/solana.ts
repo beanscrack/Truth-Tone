@@ -6,8 +6,11 @@ import { Metaplex, walletAdapterIdentity } from '@metaplex-foundation/js';
  * SOLANA CONFIGURATION
  * ================================================================================
  * 
- * NETWORK: devnet (for hackathon demo)
- * RPC: https://api.devnet.solana.com
+ * ⚠️ DEMO MODE: Using Solana mainnet-beta for live demo.
+ * Revert to devnet after demo by changing SOLANA_NETWORK back to 'devnet'.
+ * 
+ * NETWORK: mainnet-beta (LIVE - real SOL required)
+ * RPC: https://api.mainnet-beta.solana.com
  * 
  * METAPLEX TOKEN METADATA LIMITS:
  * - name: max 32 characters
@@ -16,19 +19,41 @@ import { Metaplex, walletAdapterIdentity } from '@metaplex-foundation/js';
  * - sellerFeeBasisPoints: 0-10000
  * 
  * IMPORTANT NOTES:
- * - Phantom wallet must be on devnet to sign transactions
- * - Users need devnet SOL from a faucet (https://faucet.solana.com/)
- * - Minimum balance: ~0.015 SOL for NFT mint transaction
+ * - Phantom wallet must be on mainnet to sign transactions
+ * - Users need REAL SOL in their wallet
+ * - Minimum balance: ~0.02 SOL for NFT mint transaction
  * - This is entirely client-side; backend does NOT need wallet access
  * ================================================================================
  */
 
-// Configuration - EXPLICITLY using devnet
-export const SOLANA_NETWORK = 'devnet' as const;
-export const RPC_ENDPOINT = clusterApiUrl(SOLANA_NETWORK);
+// ⚠️ DEMO MODE: Using Solana mainnet-beta for live demo. Revert to 'devnet' after demo.
+export const SOLANA_NETWORK = 'mainnet-beta' as const;
+
+// RPC endpoints with fallback - tries each in order if previous fails
+// Updated with more reliable endpoints that don't 403
+const RPC_FALLBACK_ENDPOINTS = [
+    process.env.NEXT_PUBLIC_SOLANA_RPC_URL, // Custom RPC from env (highest priority)
+    'https://solana-mainnet.g.alchemy.com/v2/demo', // Alchemy public demo
+    'https://rpc.ankr.com/solana', // Ankr free tier
+    'https://api.mainnet-beta.solana.com', // Official (often rate limited)
+].filter(Boolean) as string[];
+
+// Primary endpoint (first in list)
+export const RPC_ENDPOINT = RPC_FALLBACK_ENDPOINTS[0] || clusterApiUrl(SOLANA_NETWORK);
 
 // Minimum SOL required for minting (includes rent + tx fees)
 export const MIN_SOL_FOR_MINT = 0.02;
+
+// Demo balance fallback (from env, for display when RPC fails)
+export const DEMO_BALANCE_SOL = process.env.NEXT_PUBLIC_DEMO_BALANCE_SOL
+    ? parseFloat(process.env.NEXT_PUBLIC_DEMO_BALANCE_SOL)
+    : null;
+
+// Demo Mint Mode - skip all balance checks, show clean UI
+export const DEMO_MINT_MODE = process.env.NEXT_PUBLIC_DEMO_MINT_MODE === 'true';
+
+// Hard-coded demo balance (0.1 SOL) - NO RPC CALLS in demo mode
+export const DEMO_HARD_BALANCE = 0.1;
 
 // Metaplex Token Metadata limits
 const METAPLEX_LIMITS = {
@@ -47,21 +72,58 @@ export const connection = new Connection(RPC_ENDPOINT, {
     confirmTransactionInitialTimeout: 60000,
 });
 
-// Devnet explorer URL
-const SOLANA_EXPLORER_BASE = 'https://explorer.solana.com';
+// Cached working connection (found via getWorkingConnection)
+let cachedWorkingConnection: Connection | null = null;
+
+/**
+ * Get a working Solana connection by testing endpoints
+ * Uses getLatestBlockhash() as a fast health check
+ */
+export async function getWorkingConnection(): Promise<Connection> {
+    // Return cached if we have one
+    if (cachedWorkingConnection) {
+        return cachedWorkingConnection;
+    }
+
+    for (const rpcUrl of RPC_FALLBACK_ENDPOINTS) {
+        try {
+            console.log(`[Solana] Testing RPC: ${rpcUrl}`);
+            const testConn = new Connection(rpcUrl, { commitment: 'confirmed' });
+
+            // Quick health check - getLatestBlockhash is fast
+            await testConn.getLatestBlockhash();
+
+            console.log(`[Solana] RPC working: ${rpcUrl}`);
+            cachedWorkingConnection = testConn;
+            return testConn;
+        } catch (error) {
+            console.warn(`[Solana] RPC failed ${rpcUrl}:`, error);
+            continue;
+        }
+    }
+
+    // Fallback to default connection if all fail
+    console.warn('[Solana] All RPC endpoints failed, using default');
+    return connection;
+}
+
+// Mainnet explorer URL (Solscan for better UX)
+const SOLANA_EXPLORER_BASE = 'https://solscan.io';
 
 /**
  * Get Solana explorer link for a transaction signature
  */
 export function getExplorerLink(signature: string): string {
-    return `${SOLANA_EXPLORER_BASE}/tx/${signature}?cluster=devnet`;
+    // Mainnet - no cluster param needed for Solscan
+    return `${SOLANA_EXPLORER_BASE}/tx/${signature}`;
 }
 
 /**
  * Get Solana explorer link for an account/address
  */
 export function getAddressExplorerLink(address: string): string {
-    return `${SOLANA_EXPLORER_BASE}/address/${address}?cluster=devnet`;
+    // Mainnet - no cluster param needed for Solscan
+    return `${SOLANA_EXPLORER_BASE}/account/${address}`;
 }
 
 /**
@@ -75,6 +137,37 @@ export interface BalanceDebugInfo {
     solBalance: number;
     timestamp: string;
     error?: string;
+    balanceUnavailable?: boolean; // True when RPC failed - distinct from 0 balance
+}
+
+/**
+ * Try to get balance using RPC fallback - tries each endpoint until one works
+ */
+async function tryGetBalanceWithFallback(publicKey: PublicKey): Promise<{
+    lamports: number;
+    rpcUsed: string;
+    error?: string;
+}> {
+    for (const rpcUrl of RPC_FALLBACK_ENDPOINTS) {
+        try {
+            console.log(`[Solana] Trying RPC: ${rpcUrl}`);
+            const conn = new Connection(rpcUrl, { commitment: 'confirmed' });
+            const lamports = await conn.getBalance(publicKey);
+            console.log(`[Solana] Success! Balance: ${lamports} lamports via ${rpcUrl}`);
+            return { lamports, rpcUsed: rpcUrl };
+        } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.warn(`[Solana] RPC ${rpcUrl} failed: ${errorMsg}`);
+            // If 403 or 429, try next endpoint
+            if (errorMsg.includes('403') || errorMsg.includes('429') || errorMsg.includes('fetch')) {
+                continue;
+            }
+            // For other errors, still try next
+            continue;
+        }
+    }
+    // All endpoints failed
+    return { lamports: 0, rpcUsed: 'none', error: 'All RPC endpoints failed (403/rate limited)' };
 }
 
 /**
@@ -88,25 +181,33 @@ export async function getWalletBalanceWithDebug(publicKey: string): Promise<Bala
         lamports: 0,
         solBalance: 0,
         timestamp: new Date().toISOString(),
+        balanceUnavailable: false,
     };
 
     try {
         const pk = new PublicKey(publicKey);
         console.log(`[Solana] Fetching balance for ${pk.toBase58()}`);
-        console.log(`[Solana] Using RPC: ${RPC_ENDPOINT}`);
 
-        const lamports = await connection.getBalance(pk);
-        const solBalance = lamports / LAMPORTS_PER_SOL;
+        const result = await tryGetBalanceWithFallback(pk);
 
-        debugInfo.lamports = lamports;
-        debugInfo.solBalance = solBalance;
+        if (result.error) {
+            debugInfo.error = result.error;
+            debugInfo.balanceUnavailable = true;
+            debugInfo.rpcEndpoint = 'all failed';
+            return debugInfo;
+        }
 
-        console.log(`[Solana] Balance: ${lamports} lamports = ${solBalance} SOL`);
+        debugInfo.lamports = result.lamports;
+        debugInfo.solBalance = result.lamports / LAMPORTS_PER_SOL;
+        debugInfo.rpcEndpoint = result.rpcUsed;
+
+        console.log(`[Solana] Balance: ${debugInfo.lamports} lamports = ${debugInfo.solBalance} SOL`);
         return debugInfo;
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error('[Solana] Balance fetch failed:', errorMsg);
         debugInfo.error = errorMsg;
+        debugInfo.balanceUnavailable = true;
         return debugInfo;
     }
 }
@@ -139,9 +240,11 @@ export async function checkMintEligibility(publicKey: string): Promise<{
 
 /**
  * Initialize Metaplex with the connected wallet adapter
+ * Uses dynamic connection that tests RPC endpoints
  */
-export const initMetaplex = (wallet: any) => {
-    return Metaplex.make(connection).use(walletAdapterIdentity(wallet));
+export const initMetaplex = async (wallet: any) => {
+    const workingConnection = await getWorkingConnection();
+    return Metaplex.make(workingConnection).use(walletAdapterIdentity(wallet));
 };
 
 /**
@@ -226,12 +329,12 @@ function parseTransactionError(error: unknown): string {
 
     if (errorMessage.includes('insufficient lamports') ||
         errorMessage.includes('Insufficient funds')) {
-        return 'Insufficient devnet SOL. Please fund your wallet using https://faucet.solana.com/';
+        return 'Insufficient SOL. Please ensure your wallet has at least 0.02 SOL.';
     }
 
     if (errorMessage.includes('Transaction simulation failed') ||
         errorMessage.includes('Simulation failed')) {
-        return 'Transaction simulation failed. Ensure your wallet has devnet SOL and is connected to devnet.';
+        return 'Transaction simulation failed. Ensure your wallet has SOL and is connected to Solana mainnet.';
     }
 
     if (errorMessage.includes('User rejected')) {
@@ -287,19 +390,19 @@ export const mintVerificationNFT = async (wallet: {
         console.log(`  Symbol: "${NFT_SYMBOL}" (${NFT_SYMBOL.length}/${METAPLEX_LIMITS.SYMBOL_MAX} chars)`);
         console.log(`  URI: ${metadataUri.length}/${METAPLEX_LIMITS.URI_MAX} chars`);
 
-        // Pre-flight balance check
-        const balanceCheck = await checkMintEligibility(wallet.publicKey.toBase58());
-        console.log('[Solana] Balance check:', balanceCheck);
-
-        if (!balanceCheck.hasSufficientBalance) {
-            throw new Error(
-                `Insufficient devnet SOL (${balanceCheck.balance.toFixed(4)} SOL). ` +
-                `Minimum required: ${MIN_SOL_FOR_MINT} SOL. ` +
-                `Fund your wallet at https://faucet.solana.com/`
-            );
+        // Pre-flight balance check - LOG ONLY, do not block
+        // Let actual minting proceed - Phantom will reject if truly insufficient
+        try {
+            const balanceCheck = await checkMintEligibility(wallet.publicKey.toBase58());
+            console.log('[Solana] Balance check (non-blocking):', balanceCheck);
+            if (!balanceCheck.hasSufficientBalance && !balanceCheck.debug.balanceUnavailable) {
+                console.warn(`[Solana] Warning: Low balance (${balanceCheck.balance.toFixed(4)} SOL), attempting mint anyway...`);
+            }
+        } catch (balanceError) {
+            console.warn('[Solana] Balance check failed, proceeding with mint:', balanceError);
         }
 
-        const metaplex = initMetaplex(wallet);
+        const metaplex = await initMetaplex(wallet);
 
         // Mint the NFT with validated, short name and symbol
         const { nft, response } = await metaplex.nfts().create({

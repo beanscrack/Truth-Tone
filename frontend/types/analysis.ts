@@ -11,6 +11,7 @@ export interface NormalizedAnalysisResult {
     gemini_explanation: string;
     audio_hash: string;
     message?: string;
+    mode?: string;
     // Legacy fields for backward compatibility with existing UI
     confidence_score?: number; // 0-1 (legacy)
     explanation?: string; // legacy alias
@@ -48,6 +49,7 @@ export interface RawAnalysisResponse {
     explanation?: string;
     // Common fields
     verdict: string;
+    mode?: string;
     spectrogram?: number[][];
     frequencies?: number[];
     analysis?: {
@@ -122,6 +124,7 @@ export function normalizeAnalysisResult(raw: RawAnalysisResponse): NormalizedAna
         frequencies: raw.frequencies,
         gemini_explanation,
         audio_hash,
+        mode: raw.mode,
         // Keep legacy fields for backward compatibility
         confidence_score: overall_score / 100,
         explanation: gemini_explanation,

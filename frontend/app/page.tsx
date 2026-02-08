@@ -315,7 +315,14 @@ export default function Home() {
                       {['REAL', 'LIKELY REAL'].includes(result.verdict) ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-white">{result.verdict}</h2>
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-lg font-semibold text-white">{result.verdict}</h2>
+                        {result.mode && result.mode !== 'ml' && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 uppercase tracking-wider border border-yellow-500/20">
+                            {result.mode.replace('_', ' ')}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-neutral-500">Confidence Score</p>
                     </div>
                   </div>
