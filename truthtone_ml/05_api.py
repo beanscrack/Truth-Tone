@@ -123,66 +123,70 @@ def spectrogram_to_input(mel_db):
     return tensor
 
 
-def classify_audio(y, sr):
-    """Run full audio through model."""
-    # Pad/trim
+def _prepare_input(y_clip, sr):
+    """Convert audio clip to model input tensor (no grad, no autocast)."""
     target_len = int(sr * AUDIO_DURATION)
-    if len(y) < target_len:
-        y_padded = np.pad(y, (0, target_len - len(y)))
+    if len(y_clip) < target_len:
+        y_clip = np.pad(y_clip, (0, target_len - len(y_clip)))
     else:
-        y_padded = y[:target_len]
-    
+        y_clip = y_clip[:target_len]
+
     mel = librosa.feature.melspectrogram(
-        y=y_padded, sr=sr, n_mels=N_MELS, n_fft=N_FFT, hop_length=HOP_LENGTH
+        y=y_clip, sr=sr, n_mels=N_MELS, n_fft=N_FFT, hop_length=HOP_LENGTH
     )
     mel_db = librosa.power_to_db(mel, ref=np.max)
-    
-    input_tensor = spectrogram_to_input(mel_db).to(device)
-    
+    return spectrogram_to_input(mel_db)
+
+
+def classify_audio(y, sr):
+    """Run full audio through model."""
+    input_tensor = _prepare_input(y, sr).to(device)
+
     with torch.no_grad():
-        with autocast(device.type):
-            output = model(input_tensor)
-    
-    probs = torch.softmax(output, dim=1).cpu().numpy()[0]
+        output = model(input_tensor)
+
+    probs = torch.softmax(output, dim=1).float().cpu().numpy()[0]
     real_prob = float(probs[0]) * 100  # % real
-    
+
     return real_prob
 
 
 def classify_segments(y, sr):
-    """Run sliding window analysis for per-segment scores."""
-    segments = []
+    """Run batched sliding window analysis for per-segment scores."""
     seg_samples = int(SEGMENT_LENGTH * sr)
     hop_samples = int(SEGMENT_HOP * sr)
-    target_len = int(AUDIO_DURATION * sr)
-    
+
+    # Collect all segment positions
+    positions = []
     pos = 0
     while pos + seg_samples <= len(y):
-        segment = y[pos:pos + seg_samples]
-        
-        # Pad segment to AUDIO_DURATION for model compatibility
-        seg_padded = np.pad(segment, (0, max(0, target_len - len(segment))))[:target_len]
-        
-        mel = librosa.feature.melspectrogram(
-            y=seg_padded, sr=sr, n_mels=N_MELS, n_fft=N_FFT, hop_length=HOP_LENGTH
-        )
-        mel_db = librosa.power_to_db(mel, ref=np.max)
-        input_tensor = spectrogram_to_input(mel_db).to(device)
-        
-        with torch.no_grad():
-            with autocast(device.type):
-                output = model(input_tensor)
-        
-        probs = torch.softmax(output, dim=1).cpu().numpy()[0]
-        real_score = float(probs[0]) * 100
-        
-        segments.append({
-            "start": round(pos / sr, 2),
-            "end": round((pos + seg_samples) / sr, 2),
-            "score": round(real_score, 1),
-        })
-        
+        positions.append(pos)
         pos += hop_samples
+
+    if not positions:
+        return []
+
+    # Prepare all inputs and batch them
+    tensors = []
+    for p in positions:
+        segment = y[p:p + seg_samples]
+        tensors.append(_prepare_input(segment, sr))
+
+    batch = torch.cat(tensors, dim=0).to(device)
+
+    # Single batched inference
+    with torch.no_grad():
+        output = model(batch)
+
+    all_probs = torch.softmax(output, dim=1).float().cpu().numpy()
+
+    segments = []
+    for i, p in enumerate(positions):
+        segments.append({
+            "start": round(p / sr, 2),
+            "end": round((p + seg_samples) / sr, 2),
+            "score": round(float(all_probs[i][0]) * 100, 1),
+        })
     
     return segments
 
@@ -344,68 +348,75 @@ def compute_audio_hash(audio_bytes):
 async def analyze_audio(file: UploadFile = File(...)):
     """
     Analyze an audio file for deepfake detection.
-    
+
     Accepts: .wav, .mp3, .flac, .m4a, .ogg
     Returns: Detection results with confidence score, segments, and visualization data.
     """
     # Validate file
     if not file.filename:
         raise HTTPException(400, "No file provided")
-    
+
     ext = Path(file.filename).suffix.lower()
     if ext not in {".wav", ".mp3", ".flac", ".m4a", ".ogg", ".webm"}:
         raise HTTPException(400, f"Unsupported format: {ext}. Use .wav, .mp3, .flac, .m4a, or .ogg")
-    
+
     # Read file
     audio_bytes = await file.read()
-    
+
     if len(audio_bytes) > MAX_UPLOAD_SIZE_MB * 1024 * 1024:
         raise HTTPException(400, f"File too large. Max: {MAX_UPLOAD_SIZE_MB}MB")
-    
-    # Hash the original file
-    audio_hash = compute_audio_hash(audio_bytes)
-    
-    # Convert to audio
-    y, sr, mel_db, duration = audio_to_spectrogram(audio_bytes)
-    
-    # Overall classification
-    overall_score = classify_audio(y, sr)
-    verdict = get_verdict(overall_score)
-    
-    # Per-segment analysis
-    segments = classify_segments(y, sr)
-    
-    # Gemini explanation and analysis attributes (run concurrently)
-    import asyncio
-    explanation, (analysis, artifacts) = await asyncio.gather(
-        get_gemini_explanation(overall_score, verdict, segments, duration),
-        get_gemini_analysis_attributes(overall_score, verdict, segments, duration),
-    )
 
-    # Prepare spectrogram data for 3D visualization (downsample for JSON transfer)
-    spec_downsampled = mel_db[::2, ::4].tolist()  # reduce size
+    try:
+        # Hash the original file
+        audio_hash = compute_audio_hash(audio_bytes)
 
-    # 20x20 normalized spectrogram for the 3D mesh viz
-    spec_viz = compute_spectrogram_viz(mel_db)
+        # Convert to audio
+        y, sr, mel_db, duration = audio_to_spectrogram(audio_bytes)
 
-    # Frequency magnitudes (for visualization)
-    freqs = np.abs(np.fft.rfft(y[:sr]))  # first second
-    freq_downsampled = freqs[::10].tolist()[:200]  # top 200 points
+        # Overall classification
+        overall_score = classify_audio(y, sr)
+        verdict = get_verdict(overall_score)
 
-    return AnalysisResult(
-        overall_score=round(overall_score, 1),
-        verdict=verdict,
-        segments=segments,
-        spectrogram=spec_downsampled,
-        spectrogram_viz=spec_viz,
-        frequencies=freq_downsampled,
-        gemini_explanation=explanation,
-        analysis=analysis,
-        artifacts=artifacts,
-        audio_hash=audio_hash,
-        duration=round(duration, 2),
-        sample_rate=sr,
-    )
+        # Per-segment analysis
+        segments = classify_segments(y, sr)
+
+        # Gemini explanation and analysis attributes (run concurrently)
+        import asyncio
+        explanation, (analysis, artifacts) = await asyncio.gather(
+            get_gemini_explanation(overall_score, verdict, segments, duration),
+            get_gemini_analysis_attributes(overall_score, verdict, segments, duration),
+        )
+
+        # Prepare spectrogram data for 3D visualization (downsample for JSON transfer)
+        spec_downsampled = mel_db[::2, ::4].tolist()  # reduce size
+
+        # 20x20 normalized spectrogram for the 3D mesh viz
+        spec_viz = compute_spectrogram_viz(mel_db)
+
+        # Frequency magnitudes (for visualization)
+        freqs = np.abs(np.fft.rfft(y[:sr]))  # first second
+        freq_downsampled = freqs[::10].tolist()[:200]  # top 200 points
+
+        return AnalysisResult(
+            overall_score=round(overall_score, 1),
+            verdict=verdict,
+            segments=segments,
+            spectrogram=spec_downsampled,
+            spectrogram_viz=spec_viz,
+            frequencies=freq_downsampled,
+            gemini_explanation=explanation,
+            analysis=analysis,
+            artifacts=artifacts,
+            audio_hash=audio_hash,
+            duration=round(duration, 2),
+            sample_rate=int(sr),
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Analysis error: {str(e)}")
 
 
 @app.post("/generate-fake")
