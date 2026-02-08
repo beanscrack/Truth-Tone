@@ -27,7 +27,10 @@ venv/
 env/
 ENV/
 .env
+.env.local
+.env.*.local
 .venv
+# Note: .env.example is tracked (safe to commit)
 
 # Node.js
 node_modules/

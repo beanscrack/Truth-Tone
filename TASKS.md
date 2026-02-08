@@ -12,10 +12,10 @@
 - [x] Next.js scaffolding + audio upload UI
 - [x] Results dashboard layout + API integration
 - [x] Generator UI (Microphone icon tab, text input)
-- [ ] Solana wallet connection (Phantom)
-- [ ] NFT Minting Logic (Metaplex)
-- [ ] Demo mode page + error handling
-- [ ] Deployment to Vercel + testing
+- [x] Solana wallet connection (Phantom)
+- [x] NFT Minting Logic (Metaplex)
+- [x] Demo mode page + error handling
+- [x] Deployment to Vercel + testing
 
 ## Visualization (Person 3) - Status: 60% Complete
 - [x] Three.js setup + basic 3D mesh (AudioFingerprint.tsx)
