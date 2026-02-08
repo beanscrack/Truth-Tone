@@ -46,19 +46,9 @@ pkill -f "python 05_api.py"
 # Start Backend in background
 echo "Starting Backend (Port 8000)..."
 
-# Check if model exists, download if not
-if [ ! -f "truthtone_ml/checkpoints/best_model.pt" ]; then
-    echo "Model not found. Attempting to download..."
-    python download_model.py
-    if [ $? -ne 0 ]; then
-        echo -e "${RED}ERROR: Model not available. See instructions above.${NC}"
-        exit 1
-    fi
-fi
-
-cd truthtone_ml
-python 05_api.py --model checkpoints/best_model.pt --port 8000 --host 0.0.0.0 &
-cd ..
+# Run Uvicorn from root for backend.server module
+# This works with relative imports in backend/server.py
+uvicorn backend.server:app --reload --host 0.0.0.0 --port 8000 &
 BACKEND_PID=$!
 
 # Start Frontend

@@ -35,7 +35,7 @@ from torch.amp import autocast
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -273,10 +273,10 @@ async def get_gemini_analysis_attributes(score, verdict, segments, duration):
 Return ONLY a JSON object (no code blocks) with this EXACT structure:
 {{
     "analysis": {{
-        "breathing": "natural or unnatural",
-        "prosody_variation": "high or low",
-        "frequency_spectrum": "organic or mechanical",
-        "speaking_rhythm": "human_inconsistency or consistent"
+        "breathing": "Natural or Unnatural",
+        "prosody_variation": "High or Low",
+        "frequency_spectrum": "Organic or Mechanical",
+        "speaking_rhythm": "Human Inconsistency or Consistent"
     }},
     "artifacts": [
         {{"timestamp": 1.5, "type": "glitch", "description": "brief metallic sound"}}
@@ -284,10 +284,10 @@ Return ONLY a JSON object (no code blocks) with this EXACT structure:
 }}
 
 For the analysis fields:
-- breathing: "natural" if score >= 60, "unnatural" if below
-- prosody_variation: "high" if score >= 60, "low" if below
-- frequency_spectrum: "organic" if score >= 60, "mechanical" if below
-- speaking_rhythm: "human_inconsistency" if score >= 60, "consistent" if below
+- breathing: "Natural" if score >= 60, "Unnatural" if below
+- prosody_variation: "High" if score >= 60, "Low" if below
+- frequency_spectrum: "Organic" if score >= 60, "Mechanical" if below
+- speaking_rhythm: "Human Inconsistency" if score >= 60, "Consistent" if below
 
 For artifacts: list any suspicious segments as artifacts with their timestamps. If no suspicious segments, return an empty array."""
 
@@ -303,17 +303,17 @@ For artifacts: list any suspicious segments as artifacts with their timestamps. 
         # Fallback: derive attributes from the CNN score
         if score >= 60:
             analysis = {
-                "breathing": "natural",
-                "prosody_variation": "high",
-                "frequency_spectrum": "organic",
-                "speaking_rhythm": "human_inconsistency"
+                "breathing": "Natural",
+                "prosody_variation": "High",
+                "frequency_spectrum": "Organic",
+                "speaking_rhythm": "Human Inconsistency"
             }
         else:
             analysis = {
-                "breathing": "unnatural",
-                "prosody_variation": "low",
-                "frequency_spectrum": "mechanical",
-                "speaking_rhythm": "consistent"
+                "breathing": "Unnatural",
+                "prosody_variation": "Low",
+                "frequency_spectrum": "Mechanical",
+                "speaking_rhythm": "Consistent"
             }
         return analysis, default_artifacts
 
@@ -410,13 +410,15 @@ async def analyze_audio(file: UploadFile = File(...)):
 
 @app.post("/generate-fake")
 async def generate_fake(
-    text: str = "Hello, this is a test of deepfake voice generation.",
+    text: str = Form("Hello, this is a test of deepfake voice generation."),
     voice_file: Optional[UploadFile] = File(None),
 ):
     """
-    Generate a deepfake audio sample using ElevenLabs.
-    Optionally clone a voice from an uploaded audio file.
+    Generate a deepfake audio sample using ElevenLabs, then analyze it immediately.
+    Returns JSON with analysis results and base64 audio.
     """
+    import base64
+    
     try:
         from elevenlabs import ElevenLabs
         
@@ -449,26 +451,74 @@ async def generate_fake(
             voice_id = "21m00Tcm4TlvDq8ikWAM"  # Rachel
         
         # Generate speech
-        audio = client.generate(
+        audio_generator = client.generate(
             text=text,
             voice=voice_id,
             model="eleven_multilingual_v2"
         )
         
         # Collect audio bytes
-        audio_bytes = b"".join(audio)
+        audio_bytes = b"".join(audio_generator)
         
-        # Return as audio file
-        from fastapi.responses import Response
-        return Response(
-            content=audio_bytes,
-            media_type="audio/mpeg",
-            headers={"Content-Disposition": "attachment; filename=generated_fake.mp3"}
+        # 1. Analyze the generated audio
+        # We need to compute spectrograms etc. manually here since we have bytes, not a file upload object suitable for the other endpoint
+        # But we can reuse the helper functions
+        
+        # Hash
+        audio_hash = compute_audio_hash(audio_bytes)
+        
+        # Convert to audio/spectrogram
+        y, sr, mel_db, duration = audio_to_spectrogram(audio_bytes)
+        
+        # Classification
+        overall_score = classify_audio(y, sr)
+        verdict = get_verdict(overall_score)
+        
+        # Segments
+        segments = classify_segments(y, sr)
+        
+        # Gemini (run concurrently)
+        import asyncio
+        explanation, (analysis, artifacts) = await asyncio.gather(
+            get_gemini_explanation(overall_score, verdict, segments, duration),
+            get_gemini_analysis_attributes(overall_score, verdict, segments, duration),
         )
-    
+
+        # Viz data
+        spec_downsampled = mel_db[::2, ::4].tolist()
+        spec_viz = compute_spectrogram_viz(mel_db)
+        freqs = np.abs(np.fft.rfft(y[:sr]))
+        freq_downsampled = freqs[::10].tolist()[:200]
+
+        analysis_result = {
+            "overall_score": round(overall_score, 1),
+            "verdict": verdict,
+            "segments": segments,
+            "spectrogram": spec_downsampled,
+            "spectrogram_viz": spec_viz,
+            "frequencies": freq_downsampled,
+            "gemini_explanation": explanation,
+            "analysis": analysis,
+            "artifacts": artifacts,
+            "audio_hash": audio_hash,
+            "duration": round(duration, 2),
+            "sample_rate": sr,
+        }
+        
+        # 2. Return JSON with analysis AND audio data (base64)
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+        
+        return {
+            "status": "success",
+            "analysis": analysis_result,
+            "audio_base64": audio_base64, # Frontend can play this: <audio src={`data:audio/mpeg;base64,${audio_base64}`} />
+            "message": "Generated and analyzed successfully"
+        }
+
     except ImportError:
         raise HTTPException(500, "elevenlabs package not installed. Run: pip install elevenlabs")
     except Exception as e:
+        print(f"Generate error: {e}")
         raise HTTPException(500, f"Generation failed: {str(e)}")
 
 
