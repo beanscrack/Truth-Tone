@@ -4,6 +4,10 @@ import { useState } from 'react';
 import axios from 'axios';
 import { Upload, Mic, Play, ShieldCheck, ShieldAlert, Sparkles, Activity, FileAudio, ArrowRight } from 'lucide-react';
 import { AudioFingerprint } from '@/components/viz/AudioFingerprint';
+import { WalletButton } from '@/components/WalletButton';
+import { SolanaCertificatePanel } from '@/components/SolanaCertificatePanel';
+import { DevTestingTools } from '@/components/DevTestingTools';
+import { normalizeAnalysisResult, NormalizedAnalysisResult } from '@/types/analysis';
 // import { TimelineHeatmap } from '@/components/viz/TimelineHeatmap'; // TODO: Implement
 
 interface AnalysisResult {
@@ -33,7 +37,7 @@ interface AnalysisResult {
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [result, setResult] = useState<NormalizedAnalysisResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'upload' | 'generate'>('upload');
@@ -57,7 +61,7 @@ export default function Home() {
       const response = await axios.post('/api/analyze', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      setResult(response.data);
+      setResult(normalizeAnalysisResult(response.data));
     } catch (err: any) {
       console.error(err);
       setError("Analysis failed. Please try again.");
@@ -74,7 +78,7 @@ export default function Home() {
     try {
       const response = await axios.post('/api/generate-fake', { text: textToGenerate });
       if (response.data.analysis) {
-        setResult(response.data.analysis);
+        setResult(normalizeAnalysisResult(response.data.analysis));
       } else {
         setError("Generation succeeded but analysis data is missing.");
       }
@@ -101,6 +105,7 @@ export default function Home() {
           <div className="flex gap-4">
             <button className="text-xs font-medium text-white/70 hover:text-white transition-colors">Documentation</button>
             <button className="text-xs font-medium text-white/70 hover:text-white transition-colors">API</button>
+            <WalletButton />
           </div>
         </div>
       </nav>
@@ -243,7 +248,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-4xl font-mono font-medium text-white tracking-tighter">{(result.confidence_score * 100).toFixed(1)}%</span>
+                    <span className="text-4xl font-mono font-medium text-white tracking-tighter">{result.overall_score.toFixed(1)}%</span>
                   </div>
                 </div>
 
@@ -251,30 +256,37 @@ export default function Home() {
                 <div className="space-y-2">
                   <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-widest">Analysis Insight</h3>
                   <p className="text-sm text-neutral-300 leading-relaxed bg-white/[0.02] p-4 rounded-lg border border-white/[0.06]">
-                    {result.explanation}
+                    {result.gemini_explanation || result.explanation || 'No explanation available.'}
                   </p>
                 </div>
 
                 {/* Grid Stats */}
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                  {Object.entries(result.analysis).map(([key, value]) => (
-                    <div key={key} className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-lg">
-                      <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">{key.replace('_', ' ')}</p>
-                      <p className="text-sm font-medium text-white capitalize">{value}</p>
-                    </div>
-                  ))}
-                </div>
+                {result.analysis && (
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    {Object.entries(result.analysis).map(([key, value]) => (
+                      <div key={key} className="p-3 bg-white/[0.02] border border-white/[0.06] rounded-lg">
+                        <p className="text-[10px] text-neutral-500 uppercase tracking-wider mb-1">{key.replace('_', ' ')}</p>
+                        <p className="text-sm font-medium text-white capitalize">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 {/* Visualization */}
                 <div className="h-64 rounded-lg overflow-hidden border border-white/[0.06] relative group">
                   <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/50 backdrop-blur rounded text-[10px] text-neutral-400 border border-white/5">Spectral Fingerprint</div>
-                  <AudioFingerprint data={result.audio_fingerprint.spectrogram || []} />
+                  <AudioFingerprint data={result.audio_fingerprint?.spectrogram || result.spectrogram || []} />
                 </div>
 
                 {/* Actions */}
                 <button onClick={() => { setResult(null); setFile(null); }} className="w-full py-3 text-sm font-medium text-neutral-500 hover:text-white transition-colors border border-white/[0.06] rounded-lg hover:bg-white/[0.02]">
                   Start New Analysis
                 </button>
+
+                {/* NFT Certificate Panel */}
+                <div className="mt-4">
+                  <SolanaCertificatePanel analysisResult={result} />
+                </div>
               </div>
             )}
 
@@ -295,6 +307,9 @@ export default function Home() {
         </footer>
 
       </div>
+
+      {/* DEV Testing Tools - only visible in development */}
+      <DevTestingTools onLoadResult={setResult} />
     </main>
   );
 }
