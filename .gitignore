@@ -68,3 +68,4 @@ truthtone_ml/spectrograms/
 # Generated files
 generated_*.mp3
 eval_results/
+upload.py
