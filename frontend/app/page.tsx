@@ -1,14 +1,15 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import axios from 'axios';
 import { Upload, Mic, Play, ShieldCheck, ShieldAlert, Sparkles, Activity, FileAudio, ArrowRight } from 'lucide-react';
 import { AudioFingerprint } from '@/components/viz/AudioFingerprint';
+import { TimelineHeatmap } from '@/components/viz/TimelineHeatmap';
+import { ConfidenceGauge } from '@/components/viz/ConfidenceGauge';
 import { WalletButton } from '@/components/WalletButton';
 import { SolanaCertificatePanel } from '@/components/SolanaCertificatePanel';
 import { DevTestingTools } from '@/components/DevTestingTools';
 import { normalizeAnalysisResult, NormalizedAnalysisResult } from '@/types/analysis';
-// import { TimelineHeatmap } from '@/components/viz/TimelineHeatmap'; // TODO: Implement
 
 interface AnalysisResult {
   confidence_score: number;
@@ -42,6 +43,36 @@ export default function Home() {
 
   const [activeTab, setActiveTab] = useState<'upload' | 'generate'>('upload');
   const [textToGenerate, setTextToGenerate] = useState('');
+
+  // Audio playback ref for TimelineHeatmap seek
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  // DEV: Audio source state (changes based on REAL vs FAKE test)
+  const [devAudioSrc, setDevAudioSrc] = useState('/test-audio.mp3');
+  const [devAudioLabel, setDevAudioLabel] = useState<string | null>(null);
+
+  // Handle seek from TimelineHeatmap click
+  const handleSeek = useCallback((timeSec: number) => {
+    console.log(`[TimelineHeatmap] Seek to: ${timeSec.toFixed(2)}s`);
+    if (audioRef.current) {
+      audioRef.current.currentTime = timeSec;
+      audioRef.current.play().catch(() => {
+        // Autoplay might be blocked, that's okay
+      });
+    }
+  }, []);
+
+  // DEV: Handle audio source change from test tools
+  const handleSetAudioSrc = useCallback((src: string, label: string) => {
+    console.log(`[DEV] Setting audio source: ${src} (${label})`);
+    setDevAudioSrc(src);
+    setDevAudioLabel(label);
+    // Force audio element to reload with new source
+    if (audioRef.current) {
+      audioRef.current.load();
+    }
+  }, []);
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -236,19 +267,19 @@ export default function Home() {
             {/* Result View */}
             {result && (
               <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                {/* Status Header */}
+                {/* Status Header with Confidence Gauge */}
                 <div className="flex items-center justify-between pb-6 border-b border-white/[0.06]">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${result.verdict === 'REAL' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                      {result.verdict === 'REAL' ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${['REAL', 'LIKELY REAL'].includes(result.verdict) ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {['REAL', 'LIKELY REAL'].includes(result.verdict) ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-white">{result.verdict}</h2>
                       <p className="text-sm text-neutral-500">Confidence Score</p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-4xl font-mono font-medium text-white tracking-tighter">{result.overall_score.toFixed(1)}%</span>
+                  <div className="flex justify-center">
+                    <ConfidenceGauge score={result.overall_score} verdict={result.verdict} size={120} />
                   </div>
                 </div>
 
@@ -272,10 +303,47 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Visualization */}
-                <div className="h-64 rounded-lg overflow-hidden border border-white/[0.06] relative group">
-                  <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/50 backdrop-blur rounded text-[10px] text-neutral-400 border border-white/5">Spectral Fingerprint</div>
-                  <AudioFingerprint data={result.audio_fingerprint?.spectrogram || result.spectrogram || []} />
+                {/* Timeline Heatmap */}
+                {result.segments && result.segments.length > 0 && (
+                  <div className="p-4 bg-white/[0.02] border border-white/[0.06] rounded-lg space-y-3">
+                    <TimelineHeatmap
+                      segments={result.segments}
+                      durationSec={result.segments[result.segments.length - 1]?.end || 10}
+                      verdict={result.verdict}
+                      onSeek={handleSeek}
+                    />
+                    {/* Audio player for seek testing */}
+                    <div className="pt-2 border-t border-white/[0.06]">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] text-neutral-500">🎧 Click a heatmap segment to jump playback</p>
+                        {devAudioLabel && (
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${devAudioLabel === 'REAL'
+                              ? 'bg-green-500/20 text-green-400'
+                              : 'bg-red-500/20 text-red-400'
+                            }`}>
+                            DEV AUDIO: {devAudioLabel}
+                          </span>
+                        )}
+                      </div>
+                      <audio
+                        ref={audioRef}
+                        controls
+                        className="w-full h-8 opacity-80"
+                        src={devAudioSrc}
+                      >
+                        Your browser does not support audio playback.
+                      </audio>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3D Audio Fingerprint Visualization */}
+                <div className="h-72 rounded-lg overflow-hidden border border-white/[0.06] relative group">
+                  <AudioFingerprint
+                    spectrogram={result.audio_fingerprint?.spectrogram || result.spectrogram || []}
+                    verdict={result.verdict}
+                    overallScore={result.overall_score}
+                  />
                 </div>
 
                 {/* Actions */}
@@ -309,7 +377,7 @@ export default function Home() {
       </div>
 
       {/* DEV Testing Tools - only visible in development */}
-      <DevTestingTools onLoadResult={setResult} />
+      <DevTestingTools onLoadResult={setResult} onSetAudioSrc={handleSetAudioSrc} />
     </main>
   );
 }

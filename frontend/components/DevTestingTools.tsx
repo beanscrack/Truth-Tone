@@ -11,29 +11,37 @@ import { NormalizedAnalysisResult } from '@/types/analysis';
  * These tools help test:
  * - SolanaCertificatePanel with eligible REAL result (score >= 85)
  * - SolanaCertificatePanel with ineligible FAKE result (blocks minting)
+ * - Audio playback with different files for REAL vs FAKE
  */
 
 interface DevTestingToolsProps {
     onLoadResult: (result: NormalizedAnalysisResult) => void;
+    onSetAudioSrc?: (src: string, label: string) => void;
 }
 
 // Generate a small mock spectrogram (20x20 grid)
-function generateMockSpectrogram(): number[][] {
+function generateMockSpectrogram(isReal: boolean): number[][] {
     const rows = 20;
     const cols = 20;
     const spectrogram: number[][] = [];
     for (let i = 0; i < rows; i++) {
         const row: number[] = [];
         for (let j = 0; j < cols; j++) {
-            // Create a wave-like pattern
-            row.push(Math.sin(i * 0.3) * Math.cos(j * 0.3) * 0.5 + 0.5);
+            if (isReal) {
+                // REAL: More organic, irregular pattern
+                const noise = Math.random() * 0.2;
+                row.push(Math.sin(i * 0.3 + noise) * Math.cos(j * 0.4 - noise) * 0.5 + 0.5);
+            } else {
+                // FAKE: Smoother, more symmetric pattern
+                row.push(Math.sin(i * 0.2) * Math.sin(j * 0.2) * 0.4 + 0.5);
+            }
         }
         spectrogram.push(row);
     }
     return spectrogram;
 }
 
-export function DevTestingTools({ onLoadResult }: DevTestingToolsProps) {
+export function DevTestingTools({ onLoadResult, onSetAudioSrc }: DevTestingToolsProps) {
     // Only render in development
     if (process.env.NODE_ENV !== 'development') {
         return null;
@@ -58,7 +66,7 @@ export function DevTestingTools({ onLoadResult }: DevTestingToolsProps) {
                 confidence: 0.9 + Math.random() * 0.1
             })),
             audio_fingerprint: {
-                spectrogram: generateMockSpectrogram(),
+                spectrogram: generateMockSpectrogram(true),
                 frequency_bins: [],
                 amplitude_bins: [],
                 time_bins: []
@@ -68,9 +76,14 @@ export function DevTestingTools({ onLoadResult }: DevTestingToolsProps) {
                 { start: 1.5, end: 3.0, score: 93 },
                 { start: 3.0, end: 4.5, score: 96 }
             ],
-            spectrogram: generateMockSpectrogram()
+            spectrogram: generateMockSpectrogram(true)
         };
         onLoadResult(mockResult);
+
+        // Set REAL audio file
+        if (onSetAudioSrc) {
+            onSetAudioSrc('/test-audio-real.mp3', 'REAL');
+        }
     };
 
     const loadFakeResult = () => {
@@ -95,7 +108,7 @@ export function DevTestingTools({ onLoadResult }: DevTestingToolsProps) {
                 confidence: 0.15 + Math.random() * 0.1
             })),
             audio_fingerprint: {
-                spectrogram: generateMockSpectrogram(),
+                spectrogram: generateMockSpectrogram(false),
                 frequency_bins: [],
                 amplitude_bins: [],
                 time_bins: []
@@ -105,9 +118,14 @@ export function DevTestingTools({ onLoadResult }: DevTestingToolsProps) {
                 { start: 1.5, end: 3.0, score: 22 },
                 { start: 3.0, end: 4.5, score: 19 }
             ],
-            spectrogram: generateMockSpectrogram()
+            spectrogram: generateMockSpectrogram(false)
         };
         onLoadResult(mockResult);
+
+        // Set FAKE audio file
+        if (onSetAudioSrc) {
+            onSetAudioSrc('/test-audio-fake.mp3', 'FAKE');
+        }
     };
 
     return (
