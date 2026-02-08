@@ -10,6 +10,7 @@ export interface NormalizedAnalysisResult {
     frequencies?: number[];
     gemini_explanation: string;
     audio_hash: string;
+    message?: string;
     // Legacy fields for backward compatibility with existing UI
     confidence_score?: number; // 0-1 (legacy)
     explanation?: string; // legacy alias

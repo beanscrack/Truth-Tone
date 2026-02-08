@@ -49,16 +49,24 @@ function Terrain({ data, isReal, isFake, score }: TerrainProps) {
                 // Normalize value to 0-1 if needed
                 if (value > 1) value = value / 100;
 
-                // Apply different surface characteristics based on verdict
+                // Apply distinct visual styles based on verdict
                 if (isReal) {
-                    // REAL: More organic, irregular jagged surface
-                    const noise = Math.sin(x * 0.7) * Math.cos(y * 0.5) * 0.15;
-                    const irregularity = Math.random() * 0.1 - 0.05;
-                    value = value * (1 + noise + irregularity);
+                    // REAL: Organic, chaotic, "messy" texture
+                    // Aplify high-frequency noise to show "grain" of human voice
+                    const bioNoise = (Math.sin(x * 0.8) * Math.cos(y * 0.8)) * 0.3;
+                    const randomSpike = (Math.random() - 0.5) * 0.2;
+                    value = value * (1.2 + bioNoise + randomSpike);
                 } else if (isFake) {
-                    // FAKE: Smoother, more symmetric, uncanny
-                    const smoothFactor = Math.sin(x * 0.3) * Math.sin(y * 0.3) * 0.3;
-                    value = value * 0.8 + smoothFactor * 0.2; // Blend toward smooth
+                    // FAKE: Synthetic, quantized, "too perfect" or "blocky"
+                    // Quantize the value to create unnatural "steps" (digital artifacts)
+                    const steps = 4;
+                    value = Math.ceil(value * steps) / steps;
+
+                    // Flatten low-level noise (typical of denoised AI audio)
+                    if (value < 0.2) value = 0;
+
+                    // Add unnatural symmetry
+                    value = value * 0.9;
                 }
 
                 positionAttribute.setZ(i, value * 2.5); // Height multiplier
@@ -97,18 +105,20 @@ function Terrain({ data, isReal, isFake, score }: TerrainProps) {
             let displacement = 0;
 
             if (isReal) {
-                // REAL: Subtle chaotic organic motion
+                // REAL: Fluid, breathing, organic motion (Multifractal)
                 displacement =
-                    Math.sin(time * 1.3 + x * 0.4 + y * 0.3) * 0.03 +
-                    Math.cos(time * 0.9 + x * 0.2 - y * 0.5) * 0.02 +
-                    Math.sin(time * 2.1 + x * 0.6 + y * 0.8) * 0.015;
+                    Math.sin(time * 1.5 + x * 0.5) * 0.05 +
+                    Math.cos(time * 1.2 + y * 0.5) * 0.05 +
+                    Math.sin(time * 2.5 + x * 0.2 + y * 0.2) * 0.02;
             } else if (isFake) {
-                // FAKE: Periodic harmonic wave (uncanny, mechanical)
+                // FAKE: Robotic, rigid, "glitching" motion
+                // Sharp, mechanical pulses
+                const glichTrigger = Math.sin(time * 5.0) > 0.8 ? 0.08 : 0;
                 displacement =
-                    Math.sin(time * 2.0 + x * 0.2) * 0.04 +
-                    Math.sin(time * 2.0 + y * 0.2) * 0.04;
+                    Math.sin(time * 2.0 + x * 2.0) * 0.02 + // Fast, uniform ripple
+                    glichTrigger; // Sudden uniform jumps
             } else {
-                // Neutral: Very subtle ambient motion
+                // Neutral
                 displacement = Math.sin(time + i * 0.01) * 0.01;
             }
 

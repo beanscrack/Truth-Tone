@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { Upload, Mic, Play, ShieldCheck, ShieldAlert, Sparkles, Activity, FileAudio, ArrowRight } from 'lucide-react';
 import { AudioFingerprint } from '@/components/viz/AudioFingerprint';
@@ -48,7 +48,7 @@ export default function Home() {
   const audioRef = useRef<HTMLAudioElement>(null);
 
   // DEV: Audio source state (changes based on REAL vs FAKE test)
-  const [devAudioSrc, setDevAudioSrc] = useState('/test-audio.mp3');
+  const [devAudioSrc, setDevAudioSrc] = useState('/test-audio-real.mp3');
   const [devAudioLabel, setDevAudioLabel] = useState<string | null>(null);
 
   // Handle seek from TimelineHeatmap click
@@ -61,6 +61,13 @@ export default function Home() {
       });
     }
   }, []);
+
+  // Force audio reload when source changes
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.load();
+    }
+  }, [devAudioSrc]);
 
   // DEV: Handle audio source change from test tools
   const handleSetAudioSrc = useCallback((src: string, label: string) => {
@@ -76,9 +83,15 @@ export default function Home() {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      setFile(selectedFile);
       setResult(null);
       setError(null);
+
+      // Update audio player source to the uploaded file
+      const objectUrl = URL.createObjectURL(selectedFile);
+      setDevAudioSrc(objectUrl);
+      setDevAudioLabel('UPLOADED');
     }
   };
 
@@ -108,8 +121,24 @@ export default function Home() {
     setResult(null);
     try {
       const response = await axios.post('/api/generate-fake', { text: textToGenerate });
+
+      // Update audio player if filename is returned
+      if (response.data.filename) {
+        // We are statically serving the generated files (including fallback) at /files
+        // Assuming default backend URL or env var
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        const audioUrl = `${backendUrl}/files/${response.data.filename}`;
+
+        console.log("Setting generated audio src:", audioUrl);
+        setDevAudioSrc(audioUrl);
+        setDevAudioLabel('GENERATED AI AUDIO');
+      }
+
       if (response.data.analysis) {
-        setResult(normalizeAnalysisResult(response.data.analysis));
+        const normalized = normalizeAnalysisResult(response.data.analysis);
+        // Add message from backend response to the result object
+        normalized.message = response.data.message;
+        setResult(normalized);
       } else {
         setError("Generation succeeded but analysis data is missing.");
       }
@@ -164,7 +193,13 @@ export default function Home() {
           {/* Tab Navigation */}
           <div className="flex border-b border-white/[0.06]">
             <button
-              onClick={() => { setActiveTab('upload'); setResult(null); setError(null); }}
+              onClick={() => {
+                setActiveTab('upload');
+                setResult(null);
+                setError(null);
+                setTextToGenerate('');
+                setDevAudioLabel(null);
+              }}
               className={`flex-1 py-4 text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'upload' ? 'text-white bg-white/[0.02]' : 'text-white/50 hover:text-white hover:bg-white/[0.01]'}`}
             >
               <FileAudio className="w-4 h-4" suppressHydrationWarning />
@@ -172,7 +207,13 @@ export default function Home() {
             </button>
             <div className="w-[1px] bg-white/[0.06]" />
             <button
-              onClick={() => { setActiveTab('generate'); setResult(null); setError(null); }}
+              onClick={() => {
+                setActiveTab('generate');
+                setResult(null);
+                setError(null);
+                setFile(null);
+                setDevAudioLabel(null);
+              }}
               className={`flex-1 py-4 text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === 'generate' ? 'text-white bg-white/[0.02]' : 'text-white/50 hover:text-white hover:bg-white/[0.01]'}`}
             >
               <Mic className="w-4 h-4" suppressHydrationWarning />
@@ -318,8 +359,8 @@ export default function Home() {
                         <p className="text-[10px] text-neutral-500">🎧 Click a heatmap segment to jump playback</p>
                         {devAudioLabel && (
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${devAudioLabel === 'REAL'
-                              ? 'bg-green-500/20 text-green-400'
-                              : 'bg-red-500/20 text-red-400'
+                            ? 'bg-green-500/20 text-green-400'
+                            : 'bg-red-500/20 text-red-400'
                             }`}>
                             DEV AUDIO: {devAudioLabel}
                           </span>
@@ -347,9 +388,29 @@ export default function Home() {
                 </div>
 
                 {/* Actions */}
-                <button onClick={() => { setResult(null); setFile(null); }} className="w-full py-3 text-sm font-medium text-neutral-500 hover:text-white transition-colors border border-white/[0.06] rounded-lg hover:bg-white/[0.02]">
-                  Start New Analysis
-                </button>
+                <div className="space-y-4">
+                  {/* Generation Status Message */}
+                  {result.message && (
+                    <div className={`p-3 rounded-lg text-sm border ${result.message.includes('simulated')
+                      ? 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'
+                      : 'bg-green-500/10 border-green-500/20 text-green-400'
+                      }`}>
+                      <div className="flex items-center gap-2">
+                        {result.message.includes('simulated') ? <ShieldAlert className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
+                        <span>{result.message}</span>
+                      </div>
+                      {result.message.includes('simulated') && (
+                        <div className="mt-1 text-xs opacity-80 pl-6">
+                          The backend used a pre-generated file because the ElevenLabs API Key is missing or invalid. Check your .env file.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <button onClick={() => { setResult(null); setFile(null); }} className="w-full py-3 text-sm font-medium text-neutral-500 hover:text-white transition-colors border border-white/[0.06] rounded-lg hover:bg-white/[0.02]">
+                    Start New Analysis
+                  </button>
+                </div>
 
                 {/* NFT Certificate Panel */}
                 <div className="mt-4">

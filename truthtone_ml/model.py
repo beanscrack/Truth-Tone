@@ -15,7 +15,7 @@ The model learns to distinguish between:
 import torch
 import torch.nn as nn
 import torchvision.models as models
-from config import NUM_CLASSES, DROPOUT, FREEZE_LAYERS, UNFREEZE_FROM, MODEL_NAME
+from .config import NUM_CLASSES, DROPOUT, FREEZE_LAYERS, UNFREEZE_FROM, MODEL_NAME
 
 
 class SpectrogramClassifier(nn.Module):
