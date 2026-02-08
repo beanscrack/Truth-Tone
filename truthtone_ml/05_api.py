@@ -483,36 +483,51 @@ async def health():
     }
 
 
+HF_REPO_ID = "beanscrack/truthtone-model"
+HF_FILENAME = "best_model.pt"
+
+
+def download_model_from_hf():
+    """Download model checkpoint from Hugging Face if not cached locally."""
+    from huggingface_hub import hf_hub_download
+
+    print(f"Downloading model from HuggingFace: {HF_REPO_ID}/{HF_FILENAME}")
+    model_path = hf_hub_download(repo_id=HF_REPO_ID, filename=HF_FILENAME)
+    print(f"Model cached at: {model_path}")
+    return model_path
+
+
 def load_model_for_api(model_path):
     """Load model for inference."""
     global model, device
-    
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Loading model from {model_path} on {device}")
-    
+
     checkpoint = torch.load(model_path, map_location=device, weights_only=False)
-    
+
     model = build_model(pretrained=False)
     model.load_state_dict(checkpoint['model_state_dict'])
     model = model.to(device)
     model.eval()
-    
+
     print(f"Model loaded (epoch {checkpoint.get('epoch', '?')}, "
           f"val_acc: {checkpoint.get('val_acc', '?'):.1f}%)")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="TruthTone++ API Server")
-    parser.add_argument("--model", type=str, required=True, help="Path to model checkpoint")
+    parser.add_argument("--model", type=str, default=None, help="Path to model checkpoint (auto-downloads from HuggingFace if not provided)")
     parser.add_argument("--port", type=int, default=API_PORT)
     parser.add_argument("--host", type=str, default=API_HOST)
     args = parser.parse_args()
-    
+
     load_dotenv()
-    
-    load_model_for_api(args.model)
-    
+
+    model_path = args.model if args.model else download_model_from_hf()
+    load_model_for_api(model_path)
+
     print(f"\nStarting API server on {args.host}:{args.port}")
     print(f"  Docs: http://localhost:{args.port}/docs")
-    
+
     uvicorn.run(app, host=args.host, port=args.port)
