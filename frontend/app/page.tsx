@@ -7,9 +7,9 @@ import { AudioFingerprint } from '@/components/viz/AudioFingerprint';
 // import { TimelineHeatmap } from '@/components/viz/TimelineHeatmap'; // TODO: Implement
 
 interface AnalysisResult {
-  confidence_score: number;
+  overall_score: number;
   verdict: string;
-  explanation: string;
+  gemini_explanation: string;
   analysis: {
     breathing: string;
     prosody_variation: string;
@@ -21,13 +21,11 @@ interface AnalysisResult {
     type: string;
     description: string;
   }>;
-  timeline_data: Array<{ time: number, confidence: number }>;
-  audio_fingerprint: {
-    spectrogram?: number[][];
-    frequency_bins: number[];
-    amplitude_bins: number[];
-    time_bins: number[];
-  };
+  segments: Array<{ start: number; end: number; score: number }>;
+  spectrogram_viz: number[][];
+  audio_hash: string;
+  duration: number;
+  sample_rate: number;
 }
 
 export default function Home() {
@@ -234,8 +232,8 @@ export default function Home() {
                 {/* Status Header */}
                 <div className="flex items-center justify-between pb-6 border-b border-white/[0.06]">
                   <div className="flex items-center gap-4">
-                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${result.verdict === 'REAL' ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
-                      {result.verdict === 'REAL' ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
+                    <div className={`w-12 h-12 rounded-full flex items-center justify-center ${result.verdict === 'REAL' || result.verdict === 'LIKELY REAL' ? 'bg-green-500/10 text-green-400' : result.verdict === 'UNCERTAIN' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-red-400'}`}>
+                      {result.verdict === 'REAL' || result.verdict === 'LIKELY REAL' ? <ShieldCheck className="w-6 h-6" /> : <ShieldAlert className="w-6 h-6" />}
                     </div>
                     <div>
                       <h2 className="text-lg font-semibold text-white">{result.verdict}</h2>
@@ -243,7 +241,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <span className="text-4xl font-mono font-medium text-white tracking-tighter">{(result.confidence_score * 100).toFixed(1)}%</span>
+                    <span className="text-4xl font-mono font-medium text-white tracking-tighter">{result.overall_score.toFixed(1)}%</span>
                   </div>
                 </div>
 
@@ -251,7 +249,7 @@ export default function Home() {
                 <div className="space-y-2">
                   <h3 className="text-xs font-semibold text-neutral-500 uppercase tracking-widest">Analysis Insight</h3>
                   <p className="text-sm text-neutral-300 leading-relaxed bg-white/[0.02] p-4 rounded-lg border border-white/[0.06]">
-                    {result.explanation}
+                    {result.gemini_explanation}
                   </p>
                 </div>
 
@@ -268,7 +266,7 @@ export default function Home() {
                 {/* Visualization */}
                 <div className="h-64 rounded-lg overflow-hidden border border-white/[0.06] relative group">
                   <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/50 backdrop-blur rounded text-[10px] text-neutral-400 border border-white/5">Spectral Fingerprint</div>
-                  <AudioFingerprint data={result.audio_fingerprint.spectrogram || []} />
+                  <AudioFingerprint data={result.spectrogram_viz || []} />
                 </div>
 
                 {/* Actions */}
