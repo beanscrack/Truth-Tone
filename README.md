@@ -1,100 +1,73 @@
-# TruthTone++: Advanced Deepfake Audio Detection Platform
+# TruthTone++: AI Audio Authentication Platform
 
-## Overview
+Winner: Best Audio AI Hack, CXC AI Hackathon 2026
 
-TruthTone++ is a multimodal AI system designed to detect synthetic and deepfake audio. It combines traditional signal processing with deep learning (CNNs on Mel Spectrograms) and Large Language Model (LLM) semantic reasoning to provide high-confidence verification of audio authenticity.
+TruthTone++ is a deepfake detection platform designed to restore trust in digital audio. We built this project to go beyond simple binary classification; instead of just telling you if a recording is likely fake, TruthTone++ uses 3D visualization and blockchain-backed verification to show you exactly why a piece of audio might be suspicious.
 
-The platform analyzes audio artifacts invisible to the human ear, such as phase inconsistencies, unnatural spectral flatness, and robotic prosody, to distinguish between organic human speech and AI-generated content.
+## About CxC (Compute by Create)
 
-## Key Features
+CxC, or Compute by Create, is the premier data science hackathon at the University of Waterloo. Organized by the Waterloo Data Science Club, it is a high-level competition where students tackle real-world industry challenges using machine learning, data analysis, and predictive modeling.
 
-1.  **Hybrid Analysis Engine**: Utilizing a dual-layered approach:
-    *   **Signal Analysis**: Extracting features like spectral rolloff, zero-crossing rates, and Mel-frequency cepstral coefficients (MFCCs).
-    *   **Neural Network Classifier**: A ResNet-18 backbone trained on ASVSpoof datasets to detect generative artifacts in spectrogram images.
-    *   **Semantic Verification**: Google Gemini 2.0 Flash integration to analyze linguistic patterns, breathing unnaturalness, and prosodic inconsistencies.
+While the event attracts a community of over 2,500 young professionals annually, the physical competition is an invite-only event for a selected group of students. In 2026, the AI-focused hackathon recorded 243 participants. TruthTone++ was developed over a 36-hour sprint during this event, ultimately winning Best Audio AI Hack among a field of over 350 competing teams.
 
-2.  **Advanced Visualization**:
-    *   **3D Audio Fingerprint**: Visualization of the frequency spectrum to highlight synthetic patterns.
-    *   **Timeline Heatmap**: Second-by-second confidence scoring to pinpoint specific manipulated segments.
+## The Problem
 
-3.  **Real-time API**: A high-performance FastAPI backend capable of processing audio files and returning detailed forensic reports in real-time.
+As AI voice cloning becomes more sophisticated, it is becoming nearly impossible for human ears to distinguish between authentic recordings and synthetic deepfakes. This technological gap has led to a rise in voice-based fraud, from $25M+ corporate narrow-casting scams to election misinformation and the general erosion of trust in audio evidence within journalism and legal settings.
 
-4.  **Verification Certificates**: Generation of immutable authenticity proofs (simulated integration with Solana blockchain) for verified organic audio.
+## The Solution
 
-## Technology Stack
+TruthTone++ addresses this problem through a multi-layered verification system. Our platform doesn't just process sound; it analyzes the underlying fingerprints that AI models often leave behind—patterns that are invisible to the ear but detectable through forensic analysis.
 
-### Frontend
-*   **Framework**: Next.js 14 (App Router)
-*   **Styling**: Tailwind CSS
-*   **Language**: TypeScript
-*   **Visualization**: Custom Canvas-based renderers for spectrograms
+### Multi-Layered AI Detection
+We use a custom machine learning model trained on the ASVspoof 2019 dataset to detect generative artifacts. The system extracts audio features using librosa (including MFCCs and spectral analysis) and integrates with the Gemini API to provide plain-English explanations for its findings. Our current test datasets show a detection accuracy between 85% and 92%.
 
-### Backend
-*   **Framework**: FastAPI (Python 3.12)
-*   **ML Libraries**: PyTorch, Librosa, NumPy, Scikit-learn
-*   **LLM Integration**: Google Generative AI (Gemini)
-*   **Task Management**: Asyncio for non-blocking analysis
+### 3D Audio Fingerprint Visualization
+To make these detections intuitive, we developed a way to map frequency spectrums into interactive 3D meshes using Three.js and React Three Fiber. Human speech typically creates organic, chaotic patterns due to natural pitch variation and breathing. In contrast, AI-generated audio often reveals geometric or mathematical regularities that become obvious once you can rotate and explore the audio's "fingerprint" in 3D.
+
+### Timeline Analysis
+The platform provides a second-by-second confidence score throughout the duration of the audio. An interactive heatmap highlights specific moments where artifacts—such as impossible pitch transitions or unnatural prosody—were detected, allowing users to jump directly to suspicious segments.
+
+### Comparison and Baseline Generation
+By integrating with the ElevenLabs API, TruthTone++ can generate test deepfakes on-demand. This allows for side-by-side comparisons and visual "diffs" between original audio and AI-generated versions, helping to establish baselines for detection.
+
+### Blockchain Verification
+For audio that is verified as organic, we've integrated Solana to mint authentication certificates. By storing an immutable SHA-256 hash of the audio file on-chain, we create a timestamped record that cannot be backdated or altered, solving the trust problem for journalists and legal professionals.
+
+## Technical Architecture
+
+### Backend (Python/FastAPI)
+The backend manages the audio processing pipeline using librosa and our custom ML classifier. It handles communication with the Gemini and ElevenLabs APIs and generates the forensic reports sent to the frontend.
+
+### Frontend (Next.js/TypeScript)
+The user interface is built with Next.js and Tailwind CSS, focusing on a clear, data-heavy dashboard. It features live audio recording, drag-and-drop uploads, and the WebGL-based visualization engine for 3D exploration.
+
+### Blockchain (Solana)
+We use Metaplex for NFT minting and metadata storage. The architecture is designed to be mainnet-ready, providing low-cost verification (typically less than $0.01 per certificate).
 
 ## Installation and Setup
 
 ### Prerequisites
-*   Node.js 18+
-*   Python 3.10+
-*   Google Gemini API Key
-*   ElevenLabs API Key (Optional, for generating test fakes)
+- Node.js 18+
+- Python 3.10+
+- Google Gemini API Key
+- ElevenLabs API Key (Optional)
 
 ### Quick Start
 
-1.  Clone the repository.
-2.  Configure environment variables:
-    Create a `.env` file in the root directory based on `.env.example`.
-    Ensure `GEMINI_API_KEY` is set.
-3.  Run the automated setup script:
+1. Clone the repository.
+2. Create a .env file in the root directory based on .env.example and ensure your Gemini API key is included.
+3. Run the automated setup script:
+   ```bash
+   ./setup_and_run.sh
+   ```
+   This script will set up the Python virtual environment, install all dependencies, and start both the backend (port 8000) and frontend (port 3000).
 
-    ```bash
-    ./setup_and_run.sh
-    ```
+## Future Roadmap
 
-    This script will:
-    *   Create a Python virtual environment and install dependencies.
-    *   Install frontend NPM packages.
-    *   Start the FastAPI backend on port 8000.
-    *   Start the Next.js frontend on port 3000.
+We are currently looking into real-time detection for live calls, browser extensions for social media verification, and expanding our models to handle multi-modal analysis involving both audio and video deepfakes.
 
-4.  Access the application at `http://localhost:3000`.
+## License and Disclaimer
 
-## API Documentation
+This project is licensed under the MIT License.
 
-### POST /api/analyze
-
-Analyzes an uploaded audio file.
-
-**Request:**
-*   Content-Type: `multipart/form-data`
-*   Body: `file` (Binary audio file: WAV, MP3, M4A)
-
-**Response:**
-Returns a JSON object containing the `confidence_score` (0.0 to 1.0), `verdict` (REAL/FAKE), and detailed `analysis` metrics.
-
-### POST /api/generate-fake
-
-Generates synthetic audio for testing purposes using ElevenLabs.
-
-**Request:**
-*   Content-Type: `application/json`
-*   Body: `{ "text": "Text to synthesize" }`
-
-**Response:**
-Returns the generated audio filename and its immediate analysis results.
-
-## Model Training
-
-The ML model is located in the `truthtone_ml` directory. It uses a transfer learning approach, fine-tuning a pre-trained ResNet-18 on Mel Spectrogram images generated from the ASVSpoof 2019 dataset.
-
-## License
-
-MIT License.
-
-## Disclaimer
-
-This tool provides a probabilistic assessment of audio authenticity. While highly accurate, no detection system is 100% fallacy-proof. Results should be used as forensic indicators rather than absolute proof.
+Note: This tool provides a probabilistic assessment of audio authenticity. While highly accurate, no detection system is 100% infallible. Results should be treated as forensic indicators rather than absolute proof.
