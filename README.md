@@ -1,7 +1,7 @@
 # <p align="center">TruthTone++</p>
 
 <p align="center">
-  <strong>Restoring Trust in Digital Audio through Forensic AI Analysis & Blockchain Verification</strong>
+  <strong>Uncover The Invisible.</strong>
 </p>
 
 <p align="center">
