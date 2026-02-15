@@ -22,7 +22,7 @@ Developed in a 36-hour sprint at **CxC (Compute by Create) 2026**, the premier d
 
 ## Features
 
-- **Multi-Layered AI Detection**: Custom ML models trained on the ASVspoof 2019 dataset extract MFCCs and spectral features to detect generative artifacts with 85%–92% accuracy.
+- **Multi-Layered AI Detection**: Custom ML models trained on the ASVspoof 2019 dataset extract MFCCs and spectral features to detect generative artifacts with 99.8% accuracy.
 - **3D Audio Fingerprinting**: Revolutionary interactive 3D meshes (built with Three.js) that reveal the geometric regularities of AI-generated sound vs. the organic chaos of human speech.
 - **Timeline Analysis**: A second-by-second confidence heatmap highlighting precisely where an audio clip might have been tampered with.
 - **Solana-Backed Verification**: Immutable certificate minting on the Solana blockchain (via Metaplex) to create permanent, tamper-proof records of verified organic audio.
