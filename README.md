@@ -20,6 +20,12 @@ Developed in a 36-hour sprint at **CxC (Compute by Create) 2026**, the premier d
 
 ---
 
+## Demo
+
+[![TruthTone++ Demo Video](https://img.youtube.com/vi/M-fwg9Zm7v8/0.jpg)](https://www.youtube.com/watch?v=M-fwg9Zm7v8)
+
+---
+
 ## Features
 
 - **Multi-Layered AI Detection**: Custom ML models trained on the ASVspoof 2019 dataset extract MFCCs and spectral features to detect generative artifacts with 85%–92% accuracy.
