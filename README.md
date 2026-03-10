@@ -22,7 +22,13 @@ Developed in a 36-hour sprint at **CxC (Compute by Create) 2026**, the premier d
 
 ## Demo
 
-[![TruthTone++ Demo Video](https://img.youtube.com/vi/M-fwg9Zm7v8/0.jpg)](https://www.youtube.com/watch?v=M-fwg9Zm7v8)
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=M-fwg9Zm7v8" target="_blank">
+    <img src="https://img.youtube.com/vi/M-fwg9Zm7v8/hqdefault.jpg" alt="TruthTone++ Demo Video" width="800px" style="border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+  </a>
+  <br>
+  <em>Click above to watch the demo on YouTube</em>
+</p>
 
 ---
 
